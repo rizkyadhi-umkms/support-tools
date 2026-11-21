@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Nobu TRX Converter</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: light-dark(#f6f7f9, #111418);
+      --surface: light-dark(#ffffff, #1b2027);
+      --text: light-dark(#1b1f24, #e6e9ee);
+      --muted: light-dark(#5b6470, #9aa4b1);
+      --border: light-dark(#d5dae1, #333b46);
+      --accent: light-dark(#0b5cd5, #6aa8ff);
+      --accent-text: light-dark(#ffffff, #0b1220);
+      --error: light-dark(#b3261e, #ff8a80);
+      --error-bg: light-dark(#fce8e6, #3a1d1b);
+      --ok: light-dark(#18794e, #6fd39f);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      accent-color: var(--accent);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-block-size: 100dvh;
+      background: var(--bg);
+      color: var(--text);
+      display: grid;
+      place-items: start center;
+      padding: 2rem 1rem;
+    }
+
+    main { inline-size: min(100%, 44rem); }
+
+    h1 { font-size: 1.4rem; margin: 0 0 .25rem; text-wrap: balance; }
+    p.lead { margin: 0 0 1.5rem; color: var(--muted); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: .75rem;
+      padding: 1.25rem;
+      display: grid;
+      gap: 1rem;
+    }
+
+    .field { display: grid; gap: .35rem; }
+
+    label { font-weight: 600; }
+
+    .hint { color: var(--muted); font-size: .85rem; }
+
+    .row { display: flex; gap: .5rem; align-items: stretch; }
+
+    input {
+      flex: 1;
+      min-inline-size: 0;
+      font: 1rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: .6rem .75rem;
+      border: 1px solid var(--border);
+      border-radius: .5rem;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    input:user-invalid { border-color: var(--error); background: var(--error-bg); }
+    input:user-valid { border-color: var(--ok); }
+
+    .error-msg { display: none; color: var(--error); font-size: .875rem; }
+    .field:has(input:user-invalid) .error-msg { display: block; }
+
+    .copy { position: relative; display: flex; }
+
+    .copy-button {
+      min-inline-size: 5.5rem;
+      min-block-size: 2.5rem;
+      padding: 0 .9rem;
+      border: 1px solid var(--accent);
+      border-radius: .5rem;
+      background: var(--accent);
+      color: var(--accent-text);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .copy-button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+    .tip {
+      position: absolute;
+      inset-block-end: calc(100% + .35rem);
+      inset-inline-end: 0;
+      padding: .2rem .5rem;
+      border-radius: .35rem;
+      background: var(--text);
+      color: var(--surface);
+      font-size: .8rem;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s;
+    }
+
+    .copy-button:is([data-copied], [data-failed]) + .tip { opacity: 1; }
+    .copy-button[data-failed] + .tip { background: var(--error); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tip { transition: none; }
+    }
+
+    .swap {
+      justify-self: center;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .note {
+      margin-block-start: 1.25rem;
+      font-size: .85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Nobu TRX Converter</h1>
+    <p class="lead">Konversi transaction ID (UUID) ↔ <code>partnerReferenceNo</code> Nobu (base64url, 22 karakter). Isi salah satu, yang lain terisi otomatis.</p>
+
+    <form class="card" id="converter" novalidate>
+      <div class="field">
+        <label for="uuid">Transaction ID (UUID)</label>
+        <span id="uuid-hint" class="hint">Contoh: 9a93609e-c0bb-475d-b24b-8acda4fd3d29</span>
+        <div class="row">
+          <input
+            id="uuid"
+            name="uuid"
+            autocomplete="off"
+            spellcheck="false"
+            pattern="\s*[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}\s*"
+            aria-describedby="uuid-hint"
+            data-error="uuid-error">
+          <span class="copy">
+            <button type="button" class="copy-button" command="--copy" commandfor="uuid" aria-label="Copy transaction ID">Copy</button>
+            <span class="tip" role="status"></span>
+          </span>
+        </div>
+        <div id="uuid-error" class="error-msg">Error: UUID tidak valid. Gunakan format 8-4-4-4-12 karakter hex.</div>
+      </div>
+
+      <span class="swap" aria-hidden="true">⇅</span>
+
+      <div class="field">
+        <label for="code">Nobu code (partnerReferenceNo)</label>
+        <span id="code-hint" class="hint">Contoh: mpNgnsC7R12yS4rNpP09KQ</span>
+        <div class="row">
+          <input
+            id="code"
+            name="code"
+            autocomplete="off"
+            spellcheck="false"
+            pattern="\s*[A-Za-z0-9_\-]{22}\s*"
+            aria-describedby="code-hint"
+            data-error="code-error">
+          <span class="copy">
+            <button type="button" class="copy-button" command="--copy" commandfor="code" aria-label="Copy Nobu code">Copy</button>
+            <span class="tip" role="status"></span>
+          </span>
+        </div>
+        <div id="code-error" class="error-msg">Error: code harus 22 karakter base64url (A–Z, a–z, 0–9, - dan _).</div>
+      </div>
+    </form>
+
+    <p class="note">
+      Semua konversi jalan di browser, tidak ada data yang dikirim ke server.
+      Format code: 16 byte UUID di-encode base64url tanpa padding, sama dengan
+      <code>base64.RawURLEncoding</code> di Go.
+    </p>
+  </main>
+
+  <script>
+    const uuidInput = document.getElementById('uuid');
+    const codeInput = document.getElementById('code');
+    const UUID_RE = /^[0-9a-f]{32}$/;
+    const CODE_RE = /^[A-Za-z0-9_-]{22}$/;
+
+    function uuidToCode(value) {
+      const hex = value.trim().toLowerCase().replaceAll('-', '');
+      if (!UUID_RE.test(hex)) return null;
+      let binary = '';
+      for (let i = 0; i < 32; i += 2) binary += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
+      return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+    }
+
+    function codeToUuid(value) {
+      const code = value.trim();
+      if (!CODE_RE.test(code)) return null;
+      let binary;
+      try {
+        binary = atob(code.replaceAll('-', '+').replaceAll('_', '/') + '==');
+      } catch {
+        return null;
+      }
+      if (binary.length !== 16) return null;
+      const hex = Array.from(binary, (c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
+    function sync(source, target, convert) {
+      const value = source.value.trim();
+      if (!value) {
+        target.value = '';
+        return;
+      }
+      const result = convert(value);
+      if (result !== null) target.value = result;
+    }
+
+    uuidInput.addEventListener('input', () => sync(uuidInput, codeInput, uuidToCode));
+    codeInput.addEventListener('input', () => sync(codeInput, uuidInput, codeToUuid));
+
+    // Prefill from ?uuid= or ?code= so a link can open with a value
+    const params = new URLSearchParams(location.search);
+    if (params.has('uuid')) {
+      uuidInput.value = params.get('uuid');
+      sync(uuidInput, codeInput, uuidToCode);
+    } else if (params.has('code')) {
+      codeInput.value = params.get('code');
+      sync(codeInput, uuidInput, codeToUuid);
+    }
+
+    // List the error message in aria-describedby only while the field is invalid
+    for (const input of [uuidInput, codeInput]) {
+      const hintId = input.getAttribute('aria-describedby');
+      const errorId = input.dataset.error;
+      const update = () => {
+        const invalid = input.matches(':user-invalid');
+        input.setAttribute('aria-invalid', String(invalid));
+        input.setAttribute('aria-describedby', invalid ? `${hintId} ${errorId}` : hintId);
+      };
+      input.addEventListener('input', update);
+      input.addEventListener('blur', update);
+    }
+
+    // Copy buttons
+    const timers = new WeakMap();
+    let lastMessage = '';
+
+    function report(button, ok) {
+      const tip = button.nextElementSibling;
+      clearTimeout(timers.get(button));
+      button.removeAttribute('data-copied');
+      button.removeAttribute('data-failed');
+      let message = ok ? 'Copied' : 'Copy failed';
+      if (message === lastMessage) message += '\u00A0';
+      lastMessage = message;
+      tip.textContent = '';
+      void button.offsetWidth;
+      button.setAttribute(ok ? 'data-copied' : 'data-failed', '');
+      requestAnimationFrame(() => (tip.textContent = message));
+      timers.set(button, setTimeout(() => {
+        button.removeAttribute('data-copied');
+        button.removeAttribute('data-failed');
+        tip.textContent = '';
+      }, 2000));
+    }
+
+    async function copy(button, target) {
+      const text = target.value.trim();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        report(button, true);
+      } catch {
+        report(button, false);
+      }
+    }
+
+    if ('CommandEvent' in window) {
+      document.addEventListener('command', (event) => {
+        if (event.command === '--copy') copy(event.source, event.target);
+      }, true);
+    } else {
+      document.addEventListener('click', (event) => {
+        const button = event.target.closest('button[command="--copy"]');
+        if (!button) return;
+        const target = document.getElementById(button.getAttribute('commandfor'));
+        if (target) copy(button, target);
+      });
+    }
+  </script>
+</body>
+</html>
