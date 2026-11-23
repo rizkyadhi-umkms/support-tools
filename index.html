@@ -56,7 +56,7 @@
 
     .row { display: flex; gap: .5rem; align-items: stretch; }
 
-    input {
+    input, textarea {
       flex: 1;
       min-inline-size: 0;
       font: 1rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -67,7 +67,7 @@
       color: var(--text);
     }
 
-    input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
     input:user-invalid { border-color: var(--error); background: var(--error-bg); }
     input:user-valid { border-color: var(--ok); }
@@ -128,6 +128,27 @@
     }
 
     code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    h2 { font-size: 1.1rem; margin: 2rem 0 .25rem; }
+
+    textarea {
+      inline-size: 100%;
+      min-block-size: 12rem;
+      resize: vertical;
+      white-space: pre;
+      overflow-wrap: normal;
+    }
+
+    .bulk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+      gap: 1rem;
+    }
+
+    .bulk-head { display: flex; justify-content: space-between; align-items: end; gap: .5rem; }
+
+    .summary { margin: 0; font-size: .875rem; color: var(--muted); }
+    .summary[data-invalid] { color: var(--error); }
   </style>
 </head>
 <body>
@@ -178,6 +199,29 @@
         <div id="code-error" class="error-msg">Error: code harus 22 karakter base64url (A–Z, a–z, 0–9, - dan _).</div>
       </div>
     </form>
+
+    <h2>Bulk converter</h2>
+    <p class="lead">Paste satu kolom dari Google Sheets (satu nilai per baris). Tiap baris dideteksi otomatis: UUID jadi code, code jadi UUID. Urutan baris tetap, jadi hasil bisa langsung di-paste balik ke Sheets.</p>
+
+    <section class="card" aria-labelledby="bulk-input-label">
+      <div class="bulk-grid">
+        <div class="field">
+          <label id="bulk-input-label" for="bulk-input">Input</label>
+          <textarea id="bulk-input" autocomplete="off" spellcheck="false" placeholder="9a93609e-c0bb-475d-b24b-8acda4fd3d29&#10;mpNgnsC7R12yS4rNpP09KQ"></textarea>
+        </div>
+        <div class="field">
+          <div class="bulk-head">
+            <label for="bulk-output">Hasil</label>
+            <span class="copy">
+              <button type="button" class="copy-button" command="--copy" commandfor="bulk-output" aria-label="Copy hasil bulk">Copy</button>
+              <span class="tip" role="status"></span>
+            </span>
+          </div>
+          <textarea id="bulk-output" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+      <p id="bulk-summary" class="summary" aria-live="polite"></p>
+    </section>
 
     <p class="note">
       Semua konversi jalan di browser, tidak ada data yang dikirim ke server.
@@ -237,6 +281,48 @@
       sync(codeInput, uuidInput, codeToUuid);
     }
 
+    // Bulk: one value per line; a pasted multi-column row keeps only its first cell
+    const bulkInput = document.getElementById('bulk-input');
+    const bulkOutput = document.getElementById('bulk-output');
+    const bulkSummary = document.getElementById('bulk-summary');
+    const INVALID = '#INVALID';
+
+    function convertBulk() {
+      const lines = bulkInput.value.replace(/\r\n?/g, '\n').split('\n');
+      if (lines.at(-1) === '') lines.pop(); // Sheets copies end with a newline
+      let converted = 0;
+      const invalidLines = [];
+      const out = lines.map((line, i) => {
+        const value = line.split('\t')[0].trim();
+        if (!value) return '';
+        const result = uuidToCode(value) ?? codeToUuid(value);
+        if (result === null) {
+          invalidLines.push(i + 1);
+          return INVALID;
+        }
+        converted++;
+        return result;
+      });
+      bulkOutput.value = out.join('\n');
+      if (!converted && !invalidLines.length) {
+        bulkSummary.textContent = '';
+        bulkSummary.removeAttribute('data-invalid');
+        return;
+      }
+      let text = `${converted} baris dikonversi`;
+      if (invalidLines.length) {
+        const shown = invalidLines.slice(0, 10).join(', ');
+        const more = invalidLines.length > 10 ? `, +${invalidLines.length - 10} lagi` : '';
+        text += `, ${invalidLines.length} tidak valid (baris ${shown}${more}) ditandai ${INVALID}`;
+        bulkSummary.setAttribute('data-invalid', '');
+      } else {
+        bulkSummary.removeAttribute('data-invalid');
+      }
+      bulkSummary.textContent = text + '.';
+    }
+
+    bulkInput.addEventListener('input', convertBulk);
+
     // List the error message in aria-describedby only while the field is invalid
     for (const input of [uuidInput, codeInput]) {
       const hintId = input.getAttribute('aria-describedby');
@@ -274,8 +360,9 @@
     }
 
     async function copy(button, target) {
-      const text = target.value.trim();
-      if (!text) return;
+      // Bulk output keeps blank lines so rows stay aligned when pasted back into Sheets
+      const text = target.tagName === 'TEXTAREA' ? target.value : target.value.trim();
+      if (!text.trim()) return;
       try {
         await navigator.clipboard.writeText(text);
         report(button, true);
